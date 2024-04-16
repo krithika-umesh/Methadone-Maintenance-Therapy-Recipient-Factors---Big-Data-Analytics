@@ -1,0 +1,556 @@
+---
+title: "Final_project"
+author: "Krithika Umesh"
+date: '2022-12-04'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(dplyr)
+library(caret)
+library(ROCR)
+library(expss)
+library(corrplot)
+library(stats)
+library(MASS)
+library(glmnet)
+library(randomForest)
+library(rpart)
+library(mlbench)
+library(MLmetrics)
+library(rpart.plot)
+library(pROC)
+library(neuralnet)
+library(VIM)
+library(naniar)
+library(nnet)
+
+
+```
+
+
+```{r load data, echo=FALSE, cache=TRUE}
+teds <- read.csv("C:/Users/krith/Documents/Fall_2022_Courses/Big Data Analytics in Healthcare/Final_project/tedsd_puf_2018.csv",na.strings= '-9')
+str(teds)
+```
+
+
+```{r subset data, echo=FALSE, cache=TRUE}
+teds_subset <- teds[,c("AGE","LIVARAG","PRIMINC","EMPLOY","ARRESTS","REGION","SERVICES","NOPRIOR","SUB1","ROUTE1","FREQ1","PSOURCE","ALCFLG","HERFLG","OPSYNFLG","MTHAMFLG","METHUSE")]
+str(teds_subset)
+
+```
+
+```{r, Missingness, cache=TRUE, echo=FALSE}
+percent_misval <- nrow(teds_subset[!complete.cases(teds_subset),])/nrow(teds_subset)*100
+percent_misval
+vis_miss(teds_subset, warn_large_data = FALSE)
+teds_miss <- aggr(teds_subset, ,col=c('navyblue', 'red'), numbers=TRUE, sortVars=TRUE, labels=names(teds_subset), cex.axis=.7, gap=3, ylab=c("Proportion of missingness","Missingness Pattern"))
+```
+
+```{r, Remove missing values, cache=TRUE, echo=FALSE}
+teds_subset <- na.omit(teds_subset)
+str(teds_subset)
+summary(teds_subset)
+```
+
+
+```{r create labels, echo=FALSE, cache=TRUE}
+val_lab(teds_subset$AGE) <- lab_num("12-14 years 1
+15-17 years 2
+18-20 years 3
+21-24 years 4
+25-29 years 5
+30-34 years 6
+35-39 years 7
+40-44 years 8
+45-49 years 9
+50-54 years 10
+55-64 years 11
+65 years and older 12")
+
+val_lab(teds_subset$LIVARAG) = lab_num("
+                                            HOMELESS  1
+                                            DEPENDENT LIVING  2
+                                            INDEPENDENT LIVING 3
+                                            ")
+
+val_lab(teds_subset$PRIMINC) = lab_num("
+                                            WAGES/SALARY  1
+                                            PUBLIC ASSISTANCE 2
+                                            RETIREMENT/PENSION, DISABILITY  3
+                                            OTHER 4
+                                            NONE  5
+                                            ")
+
+val_lab(teds_subset$EMPLOY) <- lab_num("
+FULL TIME  1
+PART TIME 2
+UNEMPLOYED  3
+NOT IN LABOR FORCE  4
+")
+val_lab(teds_subset$ARRESTS) <- lab_num("None 0
+Once 1
+Two or more times 2
+")
+val_lab(teds_subset$REGION) <- lab_num("
+US JURISDICTION/TERRITORY  0
+NORTHEAST 1
+MIDWEST 2
+SOUTH 3
+WEST 4
+")
+val_lab(teds_subset$SERVICES) <- lab_num("
+DETOX, 24 HR, HOSPITAL INPATIENT 1
+DETOX, 24 HR, FREE-STANDING RESIDENTIAL 2
+REHAB/RES, HOSPITAL (NON-DETOX) 3
+REHAB/RES, SHORT TERM (30 DAYS OR FEWER)  4
+REHAB/RES, LONG TERM (MORE THAN 30 DAYS)  5
+AMBULATORY, INTENSIVE OUTPATIENT  6
+AMBULATORY, NON-INTENSIVE OUTPATIENT  7
+AMBULATORY, DETOXIFICATION  8
+")
+val_lab(teds_subset$NOPRIOR) <- lab_num("
+No prior treatment episodes 0
+One or more prior treatment episodes  1
+")
+val_lab(teds_subset$SUB1) <- lab_num("
+NONE  1
+ALCOHOL 2
+COCAINE/CRACK 3
+MARIJUANA/HASHISH 4
+HEROIN  5
+NON-PRESCRIPTION METHADONE  6
+OTHER OPIATES AND SYNTHETICS  7
+PCP 8
+OTHER HALLUCINOGENS 9
+METHAMPHETAMINE  10
+OTHER AMPHETAMINES  11
+OTHER STIMULANTS  12
+BENZODIAZEPINES 13
+OTHER NON-BENZODIAZEPINE TRANQUILIZERS  14
+BARBITURATES  15
+OTHER NON-BARBITURATE SEDATIVES OR HYPNOTICS  16
+INHALANTS 17
+OVER-THE-COUNTER MEDICATIONS  18
+OTHER 19
+")
+val_lab(teds_subset$ROUTE1) <- lab_num("
+ORAL  1
+SMOKING 2
+INHALATION 3
+INJECTION (IV OR INTRAMUSCULAR) 4
+OTHER 5
+")
+val_lab(teds_subset$FREQ1) <- lab_num("
+No use in the past month  1
+Some use  2
+Daily use 3
+")
+val_lab(teds_subset$PSOURCE) <- lab_num("
+INDIVIDUAL (INCLUDES SELF-REFERRAL) 1
+ALCOHOL/DRUG ABUSE CARE PROVIDER  2
+OTHER HEALTH CARE PROVIDER  3
+SCHOOL (EDUCATIONAL)  4
+EMPLOYER/EAP  5
+OTHER COMMUNITY REFERRAL  6
+COURT/CRIMINAL JUSTICE REFERRAL / DUI / DWI 7
+")
+ ##ALCFLG variable labels
+val_lab(teds_subset$ALCFLG) = lab_num("
+                                           SUBSTANCE NOT REPORTED  0
+                                           SUBSTANCE REPORTED  1
+                                           ")
+
+  ##HERFLG  variable labels
+val_lab(teds_subset$HERFLG) = lab_num("
+                                           SUBSTANCE NOT REPORTED  0
+                                           SUBSTANCE REPORTED  1
+                                           ")
+
+  ##OPSYNFLG variable labels
+val_lab(teds_subset$OPSYNFLG) = lab_num("
+                                             SUBSTANCE NOT REPORTED  0
+                                             SUBSTANCE REPORTED  1
+                                             ")
+
+  ##MTHAMFLG variable labels
+val_lab(teds_subset$MTHAMFLG) = lab_num("
+                                             SUBSTANCE NOT REPORTED  0
+                                             SUBSTANCE REPORTED  1
+                                             ")
+
+val_lab(teds_subset$METHUSE) <- lab_num("
+YES 1
+NO 2
+")
+
+#check the levels
+table(teds_subset$ROUTE1)
+table(teds_subset$METHUSE)
+
+```
+
+
+```{r, correlation, cache=TRUE, echo=FALSE}
+teds_cor <- cor(teds_subset[,1:16], use="complete.obs", method='spearman')
+corrplot(teds_cor, title="NonParametric correlation plot")
+highcor_teds <- findCorrelation(teds_cor, cutoff = .95)
+highcor_teds
+```
+
+```{r}
+set.seed(108)
+train_samp <- teds_subset$METHUSE %>% createDataPartition(p=0.8, list=FALSE)
+teds_train <- teds_subset[train_samp,]
+teds_test <- teds_subset[-train_samp,]
+x_train <- data.matrix(teds_train[,1:16])
+y_train <- as.matrix(teds_train[,17])
+x_test <- data.matrix(teds_test[,1:16])
+y_test <- as.matrix(teds_test[,17])
+
+```
+
+```{r, lda, echo=FALSE, cache=TRUE}
+teds_lda <- lda(METHUSE ~., data = teds_train)
+teds_lda
+lda_pred <- predict(teds_lda, teds_test)$class
+lda_tab <- table(lda_pred, teds_test$METHUSE)
+confusionMatrix(lda_tab)
+roc_lda <- roc(teds_test$METHUSE, as.numeric(lda_pred), plot=TRUE, print.auc=TRUE)
+```
+
+
+```{r, Lasso regression, cache=TRUE, echo=FALSE}
+teds_lasso <- cv.glmnet(x_train, y_train, alpha=1, nfolds=10)
+teds_lasso
+plot(teds_lasso)
+lambda.min = teds_lasso$lambda.min
+print(paste('the value of lambda that gives minimum mean cross-validated error is ', round(teds_lasso$lambda.min, 5)))
+print(paste('The value of lambda that gives the most regularized model is ', round(teds_lasso$lambda.1se,5)))
+coef(teds_lasso, s = "lambda.1se")
+lasso_pred <- data.frame(predict(teds_lasso,newx=x_train, type="response", s="lambda.1se"))
+roc(teds_train$METHUSE, lasso_pred$lambda.1se,  plot=TRUE, print.auc=TRUE)
+plot(glmnet(x_train, y_train, family="gaussian", alpha=1), "lambda", label=T, main="")
+abline(v=log(lambda.min), lty=3)
+lasso_test <- data.frame(predict(teds_lasso, newx=x_test, type= "response"), s = "lambda.1se")
+roc_lasso <- roc(teds_test$METHUSE, lasso_test$lambda.1se,  plot=TRUE, print.auc=TRUE)
+
+```
+
+
+```{r, Build tree, cache=TRUE, echo=FALSE}
+#Build model
+teds_tree <- rpart(METHUSE ~., data = teds_train, method = "class")
+prp(teds_tree,
+    faclen=0, #use full names for factor labels
+    extra=1, #display number of obs. for each terminal node
+    roundint=F, #don't round to integers in output
+    digits=5) #display 5 decimal places in output
+pred_tree <- teds_tree %>% predict(teds_test, type="class")
+table_mat <- table(pred_tree, teds_test$METHUSE)
+accuracy_test <- sum(diag(table_mat)) / sum(table_mat)
+print(paste0("The model accuracy on the test data is ",round(accuracy_test,2)))
+
+```
+
+
+```{r, Pruning the tree, cache=TRUE, echo=FALSE}
+#Pruning the tree
+best <- teds_tree$cptable[which.min(teds_tree$cptable[,"xerror"]),"CP"]
+best
+pruned_tree <- prune(teds_tree, cp=best)
+#plot model
+prp(pruned_tree,
+    faclen=0, #use full names for factor labels
+    extra=1, #display number of obs. for each terminal node
+    roundint=F, #don't round to integers in output
+    digits=5) #display 5 decimal places in output
+#make predictions
+pred_prune <- pruned_tree %>% predict(teds_test, type="class")
+table_prune <- table(pred_prune, teds_test$METHUSE)
+prune_accuracy <- sum(diag(table_prune)) / sum(table_prune)
+print(paste0("The model accuracy on the test data is ",round(prune_accuracy,2)))
+roc_tree <- roc(teds_test$METHUSE, as.numeric(pred_prune),plot=TRUE, print.auc=TRUE)
+
+```
+
+
+```{r, Random Forest, cache=TRUE, echo=FALSE}
+a = as.factor(teds_train$METHUSE)
+teds_forest <- randomForest(formula= a ~.-METHUSE, data = teds_train, ntree=200)
+teds_forest
+which.min(teds_forest$err.rate[,1])
+teds_forest$importance
+varImpPlot(teds_forest)
+```
+
+```{r, Variable Selection, cache=TRUE, echo=FALSE}
+ff <- data.frame(unlist(teds_forest$importance))
+ff$MeanDecreaseGini
+summary(ff)
+ff$var <- row.names(ff)
+forest_var <- filter(ff, MeanDecreaseGini > 7685)
+forest_var <- forest_var$var
+reduced_var <- teds_train[,forest_var]
+head(reduced_var)
+teds_forest2 <- randomForest(formula = a~., data = reduced_var, ntree=200)
+teds_forest2
+which.min(teds_forest2$err.rate[,1])
+varImpPlot(teds_forest2)
+rf_prob <- predict(teds_forest, type="prob")
+LogLoss(rf_prob, teds_test$METHUSE)
+forest_pred <- predict(teds_forest, teds_test, type="response")
+table(forest_pred, teds_test$METHUSE)
+roc_forest <- roc(teds_test$METHUSE, as.numeric(forest_pred), plot=TRUE, print.auc=TRUE)
+
+```
+
+
+```{r, Scale data for NN, echo=FALSE, cache=TRUE}
+#Random sampling
+datasubset <- teds_subset[1001:101000,]
+dim(datasubset)
+sample.size = 0.60 * nrow(datasubset)
+set.seed(108)
+index = sample(seq_len(nrow(datasubset)), size=sample.size)
+#Create train and test dataset
+tedstrain = datasubset[index,]
+tedstest = datasubset[-index,]
+#Scale data
+normalize <- function(x) {
+return ((x - min(x)) / (max(x) - min(x)))
+}
+scaled <- as.data.frame(lapply(datasubset, normalize))
+head(scaled)
+
+```
+
+```{r, split scaled data, echo=FALSE, cache=TRUE}
+trainNN = scaled[index,]
+head(trainNN)
+testNN = scaled[-index,]
+head(testNN)
+
+```
+**NN model - 1 Hidden layer**
+
+```{r, NN-1 hidden, cache=TRUE, echo=FALSE}
+set.seed(108)
+#1 hidden layer
+teds_NN1 <- neuralnet(METHUSE~., data = trainNN, linear.output = FALSE, err.fct = 'ce', likelihood = TRUE, threshold = 0.05)
+plot(teds_NN1, rep='best')
+class1_predict <- neuralnet::compute(teds_NN1, testNN[,c(1:16)])
+#Calculate CM
+result1 <- data.frame(actual = testNN$METHUSE, prediction = class1_predict$net.result)
+result1_rounded <- sapply(result1, round, digits=0)
+result1_roundeddf <- data.frame(result1_rounded)
+attach(result1_roundeddf)
+table(actual, prediction)
+#Calculate RMSE
+class1_predict <- (class1_predict$net.result*(max(datasubset$METHUSE) - min(datasubset$METHUSE))) + min(datasubset$METHUSE)
+RMSE_1 = (sum((tedstest$METHUSE - class1_predict)^2)/ nrow(tedstest))^0.5
+RMSE_1
+roc_NN <- roc(actual, prediction,  plot=TRUE, print.auc=TRUE)
+
+```
+
+
+
+```{r, all models, cache=TRUE, echo=FALSE}
+
+##plot rocs
+plot.roc(roc_lda, ylim=c(0,1), xlim=c(1,0))
+lines(roc_lda, col='blue')
+lines(roc_lasso, col='green')
+lines(roc_tree, col='purple')
+lines(roc_forest, col='red')
+lines(roc_NN, col='orange')
+legend("bottomright", legend = c("Linear Discriminant Analysis","Lasso regression","Decision tree", "Random forest", "Neural Network"), col=c('blue','green','purple','red','orange'), lwd = 2)
+
+```
+
+```{r, Final model, cache=TRUE, echo=FALSE}
+teds_2020 <- read.csv("C:/Users/krith/Downloads/2020TEDSD/tedsd_puf_2020.csv", ,na.strings= '-9')
+teds_subset20 <- teds_2020[,c("AGE","LIVARAG","PRIMINC","EMPLOY","ARRESTS","REGION","SERVICES","NOPRIOR","SUB1","ROUTE1","FREQ1","PSOURCE","ALCFLG","HERFLG","OPSYNFLG","MTHAMFLG","METHUSE")]
+str(teds_subset20)
+
+```
+
+```{r}
+```
+
+
+```{r}
+percent_misval_20 <- nrow(teds_subset20[!complete.cases(teds_subset20),])/nrow(teds_subset20)*100
+percent_misval_20
+vis_miss(teds_subset20, warn_large_data = FALSE)
+```
+
+```{r, remove missing values from test data, cache=TRUE, echo=FALSE}
+teds_subset20 <- na.omit(teds_subset20)
+str(teds_subset20)
+```
+```{r, labels for test data, cache=TRUE, echo=FALSE}
+val_lab(teds_subset20$AGE) <- lab_num("12-14 years 1
+15-17 years 2
+18-20 years 3
+21-24 years 4
+25-29 years 5
+30-34 years 6
+35-39 years 7
+40-44 years 8
+45-49 years 9
+50-54 years 10
+55-64 years 11
+65 years and older 12")
+
+val_lab(teds_subset20$LIVARAG) = lab_num("
+                                            HOMELESS  1
+                                            DEPENDENT LIVING  2
+                                            INDEPENDENT LIVING 3
+                                            ")
+
+val_lab(teds_subset20$PRIMINC) = lab_num("
+                                            WAGES/SALARY  1
+                                            PUBLIC ASSISTANCE 2
+                                            RETIREMENT/PENSION, DISABILITY  3
+                                            OTHER 4
+                                            NONE  5
+                                            ")
+
+val_lab(teds_subset20$EMPLOY) <- lab_num("
+FULL TIME  1
+PART TIME 2
+UNEMPLOYED  3
+NOT IN LABOR FORCE  4
+")
+val_lab(teds_subset20$ARRESTS) <- lab_num("None 0
+Once 1
+Two or more times 2
+")
+val_lab(teds_subset20$REGION) <- lab_num("
+US JURISDICTION/TERRITORY  0
+NORTHEAST 1
+MIDWEST 2
+SOUTH 3
+WEST 4
+")
+val_lab(teds_subset20$SERVICES) <- lab_num("
+DETOX, 24 HR, HOSPITAL INPATIENT 1
+DETOX, 24 HR, FREE-STANDING RESIDENTIAL 2
+REHAB/RES, HOSPITAL (NON-DETOX) 3
+REHAB/RES, SHORT TERM (30 DAYS OR FEWER)  4
+REHAB/RES, LONG TERM (MORE THAN 30 DAYS)  5
+AMBULATORY, INTENSIVE OUTPATIENT  6
+AMBULATORY, NON-INTENSIVE OUTPATIENT  7
+AMBULATORY, DETOXIFICATION  8
+")
+val_lab(teds_subset20$NOPRIOR) <- lab_num("
+No prior treatment episodes 0
+One or more prior treatment episodes  1
+")
+val_lab(teds_subset20$SUB1) <- lab_num("
+NONE  1
+ALCOHOL 2
+COCAINE/CRACK 3
+MARIJUANA/HASHISH 4
+HEROIN  5
+NON-PRESCRIPTION METHADONE  6
+OTHER OPIATES AND SYNTHETICS  7
+PCP 8
+OTHER HALLUCINOGENS 9
+METHAMPHETAMINE  10
+OTHER AMPHETAMINES  11
+OTHER STIMULANTS  12
+BENZODIAZEPINES 13
+OTHER NON-BENZODIAZEPINE TRANQUILIZERS  14
+BARBITURATES  15
+OTHER NON-BARBITURATE SEDATIVES OR HYPNOTICS  16
+INHALANTS 17
+OVER-THE-COUNTER MEDICATIONS  18
+OTHER 19
+")
+val_lab(teds_subset20$ROUTE1) <- lab_num("
+ORAL  1
+SMOKING 2
+INHALATION 3
+INJECTION (IV OR INTRAMUSCULAR) 4
+OTHER 5
+")
+val_lab(teds_subset20$FREQ1) <- lab_num("
+No use in the past month  1
+Some use  2
+Daily use 3
+")
+val_lab(teds_subset20$PSOURCE) <- lab_num("
+INDIVIDUAL (INCLUDES SELF-REFERRAL) 1
+ALCOHOL/DRUG ABUSE CARE PROVIDER  2
+OTHER HEALTH CARE PROVIDER  3
+SCHOOL (EDUCATIONAL)  4
+EMPLOYER/EAP  5
+OTHER COMMUNITY REFERRAL  6
+COURT/CRIMINAL JUSTICE REFERRAL / DUI / DWI 7
+")
+ ##ALCFLG variable labels
+val_lab(teds_subset20$ALCFLG) = lab_num("
+                                           SUBSTANCE NOT REPORTED  0
+                                           SUBSTANCE REPORTED  1
+                                           ")
+
+  ##HERFLG  variable labels
+val_lab(teds_subset20$HERFLG) = lab_num("
+                                           SUBSTANCE NOT REPORTED  0
+                                           SUBSTANCE REPORTED  1
+                                           ")
+
+  ##OPSYNFLG variable labels
+val_lab(teds_subset20$OPSYNFLG) = lab_num("
+                                             SUBSTANCE NOT REPORTED  0
+                                             SUBSTANCE REPORTED  1
+                                             ")
+
+  ##MTHAMFLG variable labels
+val_lab(teds_subset20$MTHAMFLG) = lab_num("
+                                             SUBSTANCE NOT REPORTED  0
+                                             SUBSTANCE REPORTED  1
+                                             ")
+
+val_lab(teds_subset20$METHUSE) <- lab_num("
+YES 1
+NO 2
+")
+
+#check the levels
+table(teds_subset20$ROUTE1)
+table(teds_subset20$METHUSE)
+```
+```{r, correlation, cache=TRUE, echo=FALSE}
+teds_cor20 <- cor(teds_subset20[,1:16], use="complete.obs", method='spearman')
+findCorrelation(teds_cor20, cutoff = .95)
+```
+
+```{r, data for pred, cache=TRUE, echo=FALSE}
+x_test1 <- data.matrix(teds_subset20[,1:16])
+y_test1 <- as.matrix(teds_subset20[,17])
+```
+
+```{r, Model testing, cache=TRUE, echo=FALSE}
+teds_lasso <- cv.glmnet(x_train, y_train, alpha=1, nfolds=10)
+teds_lasso
+plot(teds_lasso)
+lambda.min = teds_lasso$lambda.min
+print(paste('the value of lambda that gives minimum mean cross-validated error is ', round(teds_lasso$lambda.min, 5)))
+print(paste('The value of lambda that gives the most regularized model is ', round(teds_lasso$lambda.1se,5)))
+coef(teds_lasso, s = "lambda.1se")
+lasso_pred <- data.frame(predict(teds_lasso,newx=x_train, type="response", s="lambda.1se"))
+roc(teds_train$METHUSE, lasso_pred$lambda.1se,  plot=TRUE, print.auc=TRUE)
+plot(glmnet(x_train, y_train, family="gaussian", alpha=1), "lambda", label=T, main="")
+abline(v=log(lambda.min), lty=3)
+lasso_test20 <- data.frame(predict(teds_lasso, newx=x_test1, type= "response"), s = "lambda.1se")
+roc_lasso20 <- roc(teds_subset20$METHUSE, lasso_test20$lambda.1se,  plot=TRUE, print.auc=TRUE)
+
+```
+
