@@ -1,1 +1,4 @@
 # Methadone-Maintenance-Therapy-Recipient-Factors---Big-Data-Analytics
+
+Methadone is an opioid agonist, used in the treatment of Opioid Used Disorder (OUD) to reduce the effect of opioids like craving, withdrawal and blunts. It is a safe and effective medication approved by the FDAi. Methadone Maintenance Therapy has been used to treat 
+people in disparate conditions in many countries. Despite the known benefits, the treatment for only about half of the individuals using heroin included the use of methadone. An analysis was done to determine the factors that influenced recipients of the treatment and the variables that were selected include age, primary source of income, employment, source of referral, flags like heroin, alcohol etc. that might have an impact on the chances of a person being placed for methadone treatment. The results show that the accessibility to the treatment is the main factor that influences a beneficiary of opioid therapy. 
